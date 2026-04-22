@@ -1,6 +1,7 @@
 'use server';
 
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import { inngest } from '@/lib/inngest/client';
 
 export const signUpWithEmail = async ({
@@ -14,9 +15,18 @@ export const signUpWithEmail = async ({
 }: SignUpFormData) => {
   try {
     const supabase = await createServerSupabaseClient();
+    const adminSupabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
 
-    // Sign up user
-    const { data: { user }, error: signUpError } = await supabase.auth.signUp({
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -26,13 +36,20 @@ export const signUpWithEmail = async ({
       },
     });
 
-    if (signUpError) throw signUpError;
-    if (!user) throw new Error('User creation failed');
+    if (signUpError) {
+      console.error('Sign up error:', signUpError);
+      throw signUpError;
+    }
 
-    // Create profile
-    const { error: profileError } = await supabase
+    const user = signUpData.user;
+    if (!user) {
+      console.error('No user returned from signup');
+      throw new Error('User creation failed');
+    }
+
+    const { error: profileError } = await adminSupabase
       .from('profiles')
-      .insert({
+      .upsert({
         id: user.id,
         name: fullName,
         email,
@@ -40,9 +57,12 @@ export const signUpWithEmail = async ({
         investment_goals: investmentGoals,
         risk_tolerance: riskTolerance,
         preferred_industry: preferredIndustry,
-      });
+      }, { onConflict: 'id' });
 
-    if (profileError) throw profileError;
+    if (profileError) {
+      console.error('Profile creation error:', profileError);
+      throw profileError;
+    }
 
     // Trigger welcome email
     await inngest.send({
@@ -50,10 +70,13 @@ export const signUpWithEmail = async ({
       data: { email, name: fullName, country, investmentGoals, riskTolerance, preferredIndustry },
     });
 
-    return { success: true };
+    return {
+      success: true,
+      requiresEmailConfirmation: !signUpData.session,
+    };
   } catch (error) {
     console.error('Sign up failed:', error);
-    return { success: false, error: 'Sign up failed' };
+    return { success: false, error: error instanceof Error ? error.message : 'Sign up failed' };
   }
 };
 
@@ -65,11 +88,16 @@ export const signInWithEmail = async ({ email, password }: SignInFormData) => {
       password,
     });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Sign in error:', error);
+      throw error;
+    }
+
+    console.log('Sign in successful for:', email);
     return { success: true, data };
   } catch (error) {
     console.error('Sign in failed:', error);
-    return { success: false, error: 'Sign in failed' };
+    return { success: false, error: error instanceof Error ? error.message : 'Sign in failed' };
   }
 };
 

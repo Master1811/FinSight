@@ -15,7 +15,15 @@ export default function SearchCommand({ renderAs = 'button', label = 'Add stock'
   const [stocks, setStocks] = useState<StockWithWatchlistStatus[]>(initialStocks);
 
   const isSearchMode = !!searchTerm.trim();
-  const displayStocks = isSearchMode ? stocks : stocks?.slice(0, 10);
+  const displayStocks = (isSearchMode ? stocks : stocks?.slice(0, 10)).filter(
+    (stock, index, arr) =>
+      arr.findIndex(
+        (item) =>
+          item.symbol === stock.symbol &&
+          item.exchange === stock.exchange &&
+          item.type === stock.type
+      ) === index
+  );
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -84,7 +92,7 @@ export default function SearchCommand({ renderAs = 'button', label = 'Add stock'
                 {` `}({displayStocks?.length || 0})
               </div>
               {displayStocks?.map((stock, i) => (
-                  <li key={stock.symbol} className="search-item">
+                  <li key={`${stock.symbol}-${stock.exchange}-${stock.type}-${i}`} className="search-item">
                     <Link
                         href={`/stocks/${stock.symbol}`}
                         onClick={handleSelectStock}

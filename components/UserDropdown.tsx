@@ -13,14 +13,28 @@ import {useRouter} from "next/navigation";
 import {Button} from "@/components/ui/button";
 import {LogOut} from "lucide-react";
 import NavItems from "@/components/NavItems";
-import {signOut} from "@/lib/actions/auth.actions";
+import { toast } from "sonner";
 
 const UserDropdown = ({ user, initialStocks }: {user: User, initialStocks: StockWithWatchlistStatus[]}) => {
     const router = useRouter();
 
     const handleSignOut = async () => {
-        await signOut();
-        router.push("/sign-in");
+        try {
+            const res = await fetch('/api/auth/logout', { method: 'POST' });
+            const result = await res.json();
+
+            if (!res.ok || !result?.success) {
+                throw new Error(result?.error || 'Logout failed');
+            }
+
+            router.replace("/sign-in");
+            router.refresh();
+        } catch (error) {
+            console.error('Logout failed:', error);
+            toast.error('Logout failed', {
+                description: error instanceof Error ? error.message : 'Please try again.',
+            });
+        }
     }
 
     return (
