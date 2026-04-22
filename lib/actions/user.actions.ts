@@ -1,25 +1,33 @@
 'use server';
 
-import {connectToDatabase} from "@/database/mongoose";
+import { createServerSupabaseClient } from '@/lib/supabase/server';
 
 export const getAllUsersForNewsEmail = async () => {
-    try {
-        const mongoose = await connectToDatabase();
-        const db = mongoose.connection.db;
-        if(!db) throw new Error('Mongoose connection not connected');
+  try {
+    const supabase = await createServerSupabaseClient();
 
-        const users = await db.collection('user').find(
-            { email: { $exists: true, $ne: null }},
-            { projection: { _id: 1, id: 1, email: 1, name: 1, country:1 }}
-        ).toArray();
+    const { data: users, error } = await supabase
+      .from('profiles')
+      .select(`
+        id,
+        name,
+        country,
+        auth.users!inner(email)
+      `)
+      .not('name', 'is', null)
+      .not('auth.users.email', 'is', null);
 
-        return users.filter((user) => user.email && user.name).map((user) => ({
-            id: user.id || user._id?.toString() || '',
-            email: user.email,
-            name: user.name
-        }))
-    } catch (e) {
-        console.error('Error fetching users for news email:', e)
-        return []
-    }
-}
+    if (error) throw error;
+
+    return (users || [])
+      .filter((user) => user.users?.email && user.name)
+      .map((user) => ({
+        id: user.id,
+        email: user.users.email,
+        name: user.name,
+      }));
+  } catch (error) {
+    console.error('Error fetching users for news email:', error);
+    return [];
+  }
+};

@@ -1,27 +1,28 @@
-import Header from "@/components/Header";
-import {auth} from "@/lib/better-auth/auth";
-import {headers} from "next/headers";
-import {redirect} from "next/navigation";
+import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { redirect } from 'next/navigation';
+import Header from '@/components/Header';
 
-const Layout = async ({ children }: { children : React.ReactNode }) => {
-    const session = await auth.api.getSession({ headers: await headers() });
+const Layout = async ({ children }: { children: React.ReactNode }) => {
+  const supabase = await createServerSupabaseClient();
 
-    if(!session?.user) redirect('/sign-in');
+  const { data: { session }, error } = await supabase.auth.getSession();
 
-    const user = {
-        id: session.user.id,
-        name: session.user.name,
-        email: session.user.email,
-    }
+  if (!session?.user) redirect('/sign-in');
 
-    return (
-        <main className="min-h-screen text-gray-400">
-            <Header user={user} />
+  const user = {
+    id: session.user.id,
+    name: session.user.user_metadata?.name || session.user.email,
+    email: session.user.email,
+  };
 
-            <div className="container py-10">
-                {children}
-            </div>
-        </main>
-    )
-}
-export default Layout
+  return (
+    <main className="min-h-screen text-gray-400">
+      <Header user={user} />
+      <div className="container py-10">
+        {children}
+      </div>
+    </main>
+  );
+};
+
+export default Layout;

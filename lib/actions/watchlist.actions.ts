@@ -1,28 +1,99 @@
 'use server';
 
-import { connectToDatabase } from '@/database/mongoose';
-import { Watchlist } from '@/database/models/watchlist.model';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
 
 export async function getWatchlistSymbolsByEmail(email: string): Promise<string[]> {
   if (!email) return [];
 
   try {
-    const mongoose = await connectToDatabase();
-    const db = mongoose.connection.db;
-    if (!db) throw new Error('MongoDB connection not found');
+    const supabase = await createServerSupabaseClient();
 
-    // Better Auth stores users in the "user" collection
-    const user = await db.collection('user').findOne<{ _id?: unknown; id?: string; email?: string }>({ email });
+    // Get user ID from email
+    const { data: { users }, error: userError } = await supabase.auth.admin.listUsers();
+    if (userError) throw userError;
 
+    const user = users.find((u) => u.email === email);
     if (!user) return [];
 
-    const userId = (user.id as string) || String(user._id || '');
-    if (!userId) return [];
+    // Get watchlist symbols
+    const { data: items, error: itemError } = await supabase
+      .from('watchlist')
+      .select('symbol')
+      .eq('user_id', user.id);
 
-    const items = await Watchlist.find({ userId }, { symbol: 1 }).lean();
-    return items.map((i) => String(i.symbol));
-  } catch (err) {
-    console.error('getWatchlistSymbolsByEmail error:', err);
+    if (itemError) throw itemError;
+    return (items || []).map((i) => String(i.symbol));
+  } catch (error) {
+    console.error('getWatchlistSymbolsByEmail error:', error);
+    return [];
+  }
+}
+
+export async function addToWatchlist(userId: string, symbol: string, company: string) {
+  try {
+    const supabase = await createServerSupabaseClient();
+    const { error } = await supabase.from('watchlist').insert({
+      user_id: userId,
+      symbol: symbol.toUpperCase(),
+      company,
+    });
+
+    if (error) throw error;
+    return { success: true };
+  } catch (error) {
+    console.error('addToWatchlist error:', error);
+    return { success: false, error: 'Failed to add to watchlist' };
+  }
+}
+
+export async function removeFromWatchlist(userId: string, symbol: string) {
+  try {
+    const supabase = await createServerSupabaseClient();
+    const { error } = await supabase
+      .from('watchlist')
+      .delete()
+      .eq('user_id', userId)
+      .eq('symbol', symbol.toUpperCase());
+
+    if (error) throw error;
+    return { success: true };
+  } catch (error) {
+    console.error('removeFromWatchlist error:', error);
+    return { success: false, error: 'Failed to remove from watchlist' };
+  }
+}
+
+export async function isInWatchlist(userId: string, symbol: string) {
+  try {
+    const supabase = await createServerSupabaseClient();
+    const { data, error } = await supabase
+      .from('watchlist')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('symbol', symbol.toUpperCase())
+      .single();
+
+    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
+    return !!data;
+  } catch (error) {
+    console.error('isInWatchlist error:', error);
+    return false;
+  }
+}
+
+export async function getWatchlist(userId: string) {
+  try {
+    const supabase = await createServerSupabaseClient();
+    const { data, error } = await supabase
+      .from('watchlist')
+      .select('*')
+      .eq('user_id', userId)
+      .order('added_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('getWatchlist error:', error);
     return [];
   }
 }
