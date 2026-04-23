@@ -51,7 +51,7 @@ export function getFinSightConfig(): FinSightConfig {
     return config;
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const messages = error.errors.map(err => `${err.path.join('.')}: ${err.message}`);
+      const messages = error.errors?.map(err => `${err.path.join('.')}: ${err.message}`) || ['Unknown validation error'];
       throw new Error(`FinSight configuration validation failed:\n${messages.join('\n')}`);
     }
     throw error;

@@ -7,13 +7,13 @@ import { getFinSightConfig } from '@/lib/finsight/config';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse<ReportResponse>> {
   try {
     // Validate configuration
     const config = getFinSightConfig();
 
-    const reportId = params.id;
+    const { id: reportId } = await params;
 
     // TODO: Validate reportId format
     if (!reportId) {
@@ -53,7 +53,7 @@ export async function GET(
     if (error instanceof Error && error.message.includes('configuration validation failed')) {
       return NextResponse.json(
         {
-          id: params.id,
+          id: (await params).id,
           status: 'failed',
           requestHash: '',
           reportType: '',
@@ -68,7 +68,7 @@ export async function GET(
 
     return NextResponse.json(
       {
-        id: params.id,
+        id: (await params).id,
         status: 'failed',
         requestHash: '',
         reportType: '',
